@@ -1,0 +1,35 @@
+# World model training config
+# Train projection head h + dynamics predictor f_ψ on pre-computed
+# Bridge V2 encoder outputs using InfoNCE contrastive loss.
+
+data:
+  cache_dir: "data/bridge_v2_encodings"   # Output of precompute_encodings.py
+  batch_size: 512                          # More = better negatives for InfoNCE
+  seed: 42
+
+model:
+  projection_head:
+    hidden_dim: 512
+    output_dim: 256                        # Contrastive space Z' dimensionality
+
+  dynamics_predictor:
+    hidden_dim: 1024
+    num_layers: 3
+
+loss:
+  temperature: 0.1                         # InfoNCE temperature τ
+
+training:
+  lr: 3.0e-4
+  warmup_steps: 1000
+  total_steps: 50000
+  weight_decay: 0.01
+  grad_clip: 1.0
+  log_every: 100
+  eval_every: 2000
+  save_every: 5000
+
+output:
+  checkpoint_dir: "checkpoints/world_model"
+  wandb_project: "ttdr-world-model"
+  wandb_run_name: null                     # Auto-generated if null
