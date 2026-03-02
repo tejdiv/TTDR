@@ -9,14 +9,15 @@ Usage:
 
 import os
 import time
-from functools import partial
 from typing import Any, Dict, Tuple
 
 from absl import app, flags, logging
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from jax.sharding import Mesh, NamedSharding, PartitionSpec
 import optax
+import tensorflow as tf
 import yaml
 from flax.training import train_state, checkpoints
 
@@ -61,6 +62,11 @@ class WorldModel(nn.Module):
         return predicted, z_prime_target
 
 
+def shard_batch(batch, dp_sharding):
+    """Place batch arrays on devices with data-parallel sharding."""
+    return jax.tree.map(lambda x: jax.device_put(x, dp_sharding), batch)
+
+
 def create_train_state(config: dict, rng: jax.Array) -> train_state.TrainState:
     """Initialize model, optimizer, and training state."""
     model = WorldModel(
@@ -97,56 +103,79 @@ def create_train_state(config: dict, rng: jax.Array) -> train_state.TrainState:
     )
 
 
-@partial(jax.jit, static_argnames=("temperature",))
-def train_step(
-    state: train_state.TrainState,
-    batch: dict,
-    temperature: float,
-) -> Tuple[train_state.TrainState, dict]:
-    """Single training step.
+def make_train_step(replicated_sharding, dp_sharding, temperature: float):
+    """Create a sharded train_step function.
 
     Args:
-        state: Current training state.
-        batch: Dict with z_t, z_target.
-        temperature: InfoNCE temperature.
+        replicated_sharding: NamedSharding for replicated params/metrics.
+        dp_sharding: NamedSharding for data-parallel batch sharding.
+        temperature: InfoNCE temperature (static).
 
     Returns:
-        Updated state and metrics dict.
+        JIT-compiled train_step function with correct shardings.
     """
 
-    def loss_fn(params):
-        predicted, target_proj = state.apply_fn(
-            {"params": params},
-            batch["z_t"],
-            batch["z_target"],
-            train=True,
-        )
-        loss = infonce_loss(predicted, target_proj, temperature=temperature)
-        return loss, {"loss": loss, "predicted": predicted, "target_proj": target_proj}
+    @jax.jit(
+        # state is replicated, batch is data-parallel
+        in_shardings=(replicated_sharding, dp_sharding),
+        out_shardings=(replicated_sharding, replicated_sharding),
+        # allows jax to modify `state` in-place, saving memory
+        donate_argnums=0,
+    )
+    def train_step(
+        state: train_state.TrainState,
+        batch: dict,
+    ) -> Tuple[train_state.TrainState, dict]:
+        def loss_fn(params):
+            predicted, target_proj = state.apply_fn(
+                {"params": params},
+                batch["z_t"],
+                batch["z_target"],
+                train=True,
+            )
+            loss = infonce_loss(predicted, target_proj, temperature=temperature)
+            return loss, {"loss": loss, "predicted": predicted, "target_proj": target_proj}
 
-    (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
-    state = state.apply_gradients(grads=grads)
+        (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
+        state = state.apply_gradients(grads=grads)
 
-    # Compute retrieval accuracy (is the nearest neighbor the correct target?)
-    predicted = aux["predicted"]
-    target_proj = aux["target_proj"]
-    # Pairwise distances
-    diff = predicted[:, None, :] - target_proj[None, :, :]
-    distances = jnp.sum(diff ** 2, axis=-1)  # (B, B)
-    nearest = jnp.argmin(distances, axis=-1)  # (B,)
-    accuracy = jnp.mean(nearest == jnp.arange(predicted.shape[0]))
+        # Compute retrieval accuracy (is the nearest neighbor the correct target?)
+        predicted = aux["predicted"]
+        target_proj = aux["target_proj"]
+        # Pairwise distances — XLA inserts all-gather across devices automatically
+        diff = predicted[:, None, :] - target_proj[None, :, :]
+        distances = jnp.sum(diff ** 2, axis=-1)  # (B, B)
+        nearest = jnp.argmin(distances, axis=-1)  # (B,)
+        accuracy = jnp.mean(nearest == jnp.arange(predicted.shape[0]))
 
-    metrics = {
-        "loss": loss,
-        "retrieval_accuracy": accuracy,
-        "grad_norm": optax.global_norm(grads),
-    }
-    return state, metrics
+        metrics = {
+            "loss": loss,
+            "retrieval_accuracy": accuracy,
+            "grad_norm": optax.global_norm(grads),
+        }
+        return state, metrics
+
+    return train_step
 
 
 def main(_):
+    # Prevent TensorFlow from grabbing GPU memory
+    tf.config.set_visible_devices([], "GPU")
+
     with open(FLAGS.config, "r") as f:
         config = yaml.safe_load(f)
+
+    # Multi-GPU mesh setup (works transparently on 1 GPU)
+    devices = jax.devices()
+    logging.info(f"JAX devices: {len(devices)} ({[d.platform for d in devices]})")
+    assert config["data"]["batch_size"] % len(devices) == 0, (
+        f"batch_size {config['data']['batch_size']} must be divisible by "
+        f"device_count {len(devices)}"
+    )
+
+    mesh = Mesh(jax.devices(), axis_names="batch")
+    replicated_sharding = NamedSharding(mesh, PartitionSpec())
+    dp_sharding = NamedSharding(mesh, PartitionSpec("batch"))
 
     # Initialize
     rng = jax.random.PRNGKey(config["data"]["seed"])
@@ -165,6 +194,9 @@ def main(_):
     total_steps = config["training"]["total_steps"]
     os.makedirs(config["output"]["checkpoint_dir"], exist_ok=True)
 
+    # Build sharded train_step
+    train_step = make_train_step(replicated_sharding, dp_sharding, temperature)
+
     # Training loop
     step = 0
     epoch = 0
@@ -176,10 +208,12 @@ def main(_):
             if step >= total_steps:
                 break
 
-            state, metrics = train_step(state, batch, temperature)
+            batch = shard_batch(batch, dp_sharding)
+            state, metrics = train_step(state, batch)
             step += 1
 
             if step % config["training"]["log_every"] == 0:
+                metrics = jax.device_get(metrics)
                 elapsed = time.time() - t0
                 steps_per_sec = step / elapsed
                 logging.info(

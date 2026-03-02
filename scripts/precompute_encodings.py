@@ -24,6 +24,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import tensorflow as tf
+# Prevent TF from grabbing GPU memory — JAX needs it
+tf.config.set_visible_devices([], "GPU")
 from tqdm import tqdm
 
 from octo.model.octo_model import OctoModel
@@ -86,9 +88,8 @@ def main(_):
     def encode_batch(obs, task, pad_mask):
         return extract_readout_features(model, obs, task, pad_mask)
 
-    # Collect all transition triples
+    # Collect all transition pairs
     all_z_t = []
-    all_text_embed = []
     all_z_target = []
 
     traj_count = 0
@@ -96,6 +97,18 @@ def main(_):
         traj_count += 1
         if FLAGS.max_trajectories > 0 and traj_count > FLAGS.max_trajectories:
             break
+
+        # Debug: print keys on first trajectory
+        if traj_count == 1:
+            logging.info(f"Trajectory keys: {list(traj.keys())}")
+            logging.info(f"Observation keys: {list(traj['observation'].keys())}")
+            for k, v in traj["observation"].items():
+                logging.info(f"  obs/{k}: shape={v.shape}, dtype={v.dtype}")
+                if v.dtype == object and len(v) > 0:
+                    sample = v[0]
+                    logging.info(f"    sample type={type(sample)}, "
+                                 f"len={len(sample) if hasattr(sample, '__len__') else 'N/A'}, "
+                                 f"repr={repr(sample[:30]) if isinstance(sample, (bytes, np.bytes_)) and len(sample) > 0 else repr(sample)}")
 
         # traj has shape (traj_len, *) for each key
         traj_len = traj["action"].shape[0]
@@ -125,49 +138,74 @@ def main(_):
             bs = len(batch_indices)
 
             # Build observation batch for time t: (batch, window=1, *)
+            IMAGE_KEYS = {"image_primary", "image_secondary", "image_wrist"}
             obs_t = {}
             obs_target = {}
             for key in traj["observation"]:
-                frames_t = traj["observation"][key][batch_indices]
-                frames_target = traj["observation"][key][target_indices]
-                # Add window dimension: (batch, *) → (batch, 1, *)
-                obs_t[key] = frames_t[:, None]
-                obs_target[key] = frames_target[:, None]
+                vals_t = traj["observation"][key][batch_indices]
+                vals_target = traj["observation"][key][target_indices]
 
-            obs_t = jax.tree_map(jnp.array, obs_t)
-            obs_target = jax.tree_map(jnp.array, obs_target)
+                if key in IMAGE_KEYS and vals_t.dtype == object:
+                    # Decode JPEG byte strings into uint8 arrays
+                    # (Bridge V2 RLDS stores images as JPEG bytes via tfds.features.Image)
+                    def decode_images(byte_array):
+                        imgs = []
+                        for b in byte_array:
+                            if isinstance(b, (bytes, np.bytes_)) and len(b) > 0:
+                                img = tf.io.decode_image(
+                                    b, channels=3,
+                                    expand_animations=False,
+                                    dtype=tf.uint8,
+                                )
+                                imgs.append(img.numpy())
+                            else:
+                                return None  # padding — skip this key
+                        return np.stack(imgs)
+
+                    decoded_t = decode_images(vals_t)
+                    decoded_target = decode_images(vals_target)
+                    if decoded_t is None or decoded_target is None:
+                        continue
+                    # Add window dim: (batch, H, W, C) → (batch, 1, H, W, C)
+                    obs_t[key] = decoded_t[:, None]
+                    obs_target[key] = decoded_target[:, None]
+                elif vals_t.dtype == object or vals_t.dtype.kind in ('U', 'S', 'O'):
+                    continue
+                else:
+                    obs_t[key] = vals_t[:, None]
+                    obs_target[key] = vals_target[:, None]
+
+            # Debug: log what made it into obs dict
+            if traj_count == 1 and batch_start == 0:
+                logging.info(f"obs_t keys after decode: {list(obs_t.keys())}")
+                for k, v in obs_t.items():
+                    logging.info(f"  {k}: shape={v.shape}, dtype={v.dtype}")
+
+            if not any(k.startswith("image_") for k in obs_t):
+                logging.warning("No image keys in obs_t — skipping batch")
+                continue
+
+            # Add timestep_pad_mask (all valid)
+            obs_t["timestep_pad_mask"] = np.ones((bs, 1), dtype=bool)
+            obs_target["timestep_pad_mask"] = np.ones((bs, 1), dtype=bool)
+
+            obs_t = jax.tree.map(jnp.array, obs_t)
+            obs_target = jax.tree.map(jnp.array, obs_target)
 
             # Tile task for batch
-            task_batch = jax.tree_map(lambda x: jnp.tile(x, (bs, *([1] * (x.ndim - 1)))), task)
+            task_batch = jax.tree.map(lambda x: jnp.tile(x, (bs, *([1] * (x.ndim - 1)))), task)
 
             pad_mask = jnp.ones((bs, 1), dtype=bool)
 
-            # Encode
-            z_t = encode_batch({"observation": obs_t}, task_batch, pad_mask)
-            z_target = encode_batch({"observation": obs_target}, task_batch, pad_mask)
+            # Encode — pass obs dict directly (not wrapped in {"observation": ...})
+            z_t = encode_batch(obs_t, task_batch, pad_mask)
+            z_target = encode_batch(obs_target, task_batch, pad_mask)
 
             all_z_t.append(np.array(z_t))
             all_z_target.append(np.array(z_target))
 
-            # Extract text embedding from task (same for all frames in this traj)
-            # Use the task token output from the transformer as text embedding
-            task_outputs = model.run_transformer(
-                {"observation": obs_t[:1]},
-                jax.tree_map(lambda x: x[:1], task_batch),
-                jnp.ones((1, 1), dtype=bool),
-            )
-            if "task" in task_outputs:
-                text_emb = jnp.mean(task_outputs["task"].tokens, axis=(0, 1))
-            else:
-                # Fallback: use zeros
-                text_emb = jnp.zeros(768)
-            # Repeat for batch
-            text_emb_batch = jnp.tile(text_emb[None], (bs, 1))
-            all_text_embed.append(np.array(text_emb_batch))
-
     # Concatenate and save
     z_t_all = np.concatenate(all_z_t, axis=0)
-    text_embed_all = np.concatenate(all_text_embed, axis=0)
     z_target_all = np.concatenate(all_z_target, axis=0)
 
     output_path = os.path.join(FLAGS.output_dir, "encodings.h5")
@@ -175,7 +213,6 @@ def main(_):
 
     with h5py.File(output_path, "w") as f:
         f.create_dataset("z_t", data=z_t_all, compression="gzip")
-        f.create_dataset("text_embed", data=text_embed_all, compression="gzip")
         f.create_dataset("z_target", data=z_target_all, compression="gzip")
         f.attrs["chunk_size"] = m
         f.attrs["encoder_dim"] = z_t_all.shape[1]

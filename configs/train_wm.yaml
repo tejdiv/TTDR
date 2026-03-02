@@ -4,7 +4,7 @@
 
 data:
   cache_dir: "data/bridge_v2_encodings"   # Output of precompute_encodings.py
-  batch_size: 512                          # More = better negatives for InfoNCE
+  batch_size: 1024                         # Global batch across all devices (more = better negatives for InfoNCE)
   seed: 42
 
 model:

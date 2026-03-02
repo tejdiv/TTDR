@@ -65,9 +65,8 @@ def make_bridge_trajectory_dataset(
 class CachedContrastiveDataset:
     """Loads pre-computed encoder outputs from HDF5 for world model training.
 
-    Yields batches of (z_t, text_embed, z_target) where:
+    Yields batches of (z_t, z_target) where:
         z_t:         encoder output at time t,      shape (batch, 768)
-        text_embed:  language embedding,             shape (batch, text_dim)
         z_target:    encoder output at time t+m,     shape (batch, 768)
     """
 
@@ -90,11 +89,10 @@ class CachedContrastiveDataset:
         h5_path = os.path.join(cache_dir, "encodings.h5")
         with h5py.File(h5_path, "r") as f:
             self.z_t = np.array(f["z_t"])              # (N, 768)
-            self.text_embed = np.array(f["text_embed"]) # (N, text_dim)
             self.z_target = np.array(f["z_target"])     # (N, 768)
 
         self.num_samples = self.z_t.shape[0]
-        assert self.z_t.shape[0] == self.text_embed.shape[0] == self.z_target.shape[0]
+        assert self.z_t.shape[0] == self.z_target.shape[0]
 
     def __len__(self) -> int:
         return self.num_samples // self.batch_size
@@ -108,6 +106,5 @@ class CachedContrastiveDataset:
             idx = indices[start : start + self.batch_size]
             yield {
                 "z_t": jnp.array(self.z_t[idx]),
-                "text_embed": jnp.array(self.text_embed[idx]),
                 "z_target": jnp.array(self.z_target[idx]),
             }

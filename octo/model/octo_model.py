@@ -5,7 +5,10 @@ from typing import Any, Optional, Tuple
 
 import flax
 from flax import struct
-from flax.training import orbax_utils
+try:
+    from flax.training import orbax_utils
+except ImportError:
+    orbax_utils = None
 import jax
 from jax.experimental import multihost_utils
 import jax.numpy as jnp
@@ -116,7 +119,7 @@ class OctoModel:
                 len(texts), dtype=bool
             )
         else:
-            batch_size = jax.tree_leaves(goals)[0].shape[0]
+            batch_size = jax.tree.leaves(goals)[0].shape[0]
             tasks["language_instruction"] = [""] * batch_size
             tasks["pad_mask_dict"]["language_instruction"] = np.zeros(
                 batch_size, dtype=bool
@@ -296,12 +299,12 @@ class OctoModel:
         logging.debug(
             "Model was trained with observations: %s",
             flax.core.pretty_repr(
-                jax.tree_map(jnp.shape, example_batch["observation"])
+                jax.tree.map(jnp.shape, example_batch["observation"])
             ),
         )
         logging.debug(
             "Model was trained with tasks: %s",
-            flax.core.pretty_repr(jax.tree_map(jnp.shape, example_batch["task"])),
+            flax.core.pretty_repr(jax.tree.map(jnp.shape, example_batch["task"])),
         )
 
         # load dataset statistics
@@ -309,7 +312,7 @@ class OctoModel:
             tf.io.gfile.join(checkpoint_path, "dataset_statistics.json"), "r"
         ) as f:
             dataset_statistics = json.load(f)
-            dataset_statistics = jax.tree_map(
+            dataset_statistics = jax.tree.map(
                 np.array, dataset_statistics, is_leaf=lambda x: not isinstance(x, dict)
             )
 
@@ -332,11 +335,19 @@ class OctoModel:
             partial(module.init, train=False), jax.random.PRNGKey(0), *init_args
         )["params"]
         # restore params, checking to make sure the shape matches
-        checkpointer = orbax.checkpoint.CheckpointManager(
-            checkpoint_path, orbax.checkpoint.PyTreeCheckpointer()
-        )
+        try:
+            checkpointer = orbax.checkpoint.CheckpointManager(
+                checkpoint_path, orbax.checkpoint.PyTreeCheckpointer()
+            )
+        except AttributeError:
+            # newer orbax removed PyTreeCheckpointer
+            checkpointer = orbax.checkpoint.CheckpointManager(checkpoint_path)
         step = step if step is not None else checkpointer.latest_step()
-        params = checkpointer.restore(step, params_shape)
+        try:
+            params = checkpointer.restore(step, params_shape)
+        except TypeError:
+            # newer orbax restore API
+            params = checkpointer.restore(step)
 
         if config["text_processor"] is not None:
             text_processor = ModuleSpec.instantiate(config["text_processor"])()
@@ -373,18 +384,27 @@ class OctoModel:
                 "Must provide exactly one of checkpoint_path or checkpoint_manager."
             )
         if checkpoint_manager is None:
-            checkpoint_manager = orbax.checkpoint.CheckpointManager(
-                checkpoint_path, orbax.checkpoint.PyTreeCheckpointer()
-            )
+            try:
+                checkpoint_manager = orbax.checkpoint.CheckpointManager(
+                    checkpoint_path, orbax.checkpoint.PyTreeCheckpointer()
+                )
+            except AttributeError:
+                checkpoint_manager = orbax.checkpoint.CheckpointManager(
+                    checkpoint_path
+                )
         if checkpoint_path is None:
             checkpoint_path = str(checkpoint_manager._directory)
 
         # save params
-        checkpoint_manager.save(
-            step,
-            self.params,
-            {"save_args": orbax_utils.save_args_from_target(self.params)},
-        )
+        try:
+            checkpoint_manager.save(
+                step,
+                self.params,
+                {"save_args": orbax_utils.save_args_from_target(self.params)},
+            )
+        except (TypeError, AttributeError):
+            # newer orbax/flax removed save_args_from_target
+            checkpoint_manager.save(step, self.params)
 
         if jax.process_index() == 0:
             # save config
@@ -408,7 +428,7 @@ class OctoModel:
             if not tf.io.gfile.exists(dataset_statistics_path):
                 with tf.io.gfile.GFile(dataset_statistics_path, "w") as f:
                     json.dump(
-                        jax.tree_map(lambda x: x.tolist(), self.dataset_statistics),
+                        jax.tree.map(lambda x: x.tolist(), self.dataset_statistics),
                         f,
                     )
 
@@ -436,7 +456,7 @@ class OctoModel:
         module = OctoModule.create(**config["model"])
         rng = rng if rng is not None else jax.random.PRNGKey(0)
         example_batch = multihost_utils.process_allgather(example_batch)
-        example_batch = jax.tree_map(lambda x: x[:1], example_batch)
+        example_batch = jax.tree.map(lambda x: x[:1], example_batch)
 
         init_args = (
             example_batch["observation"],
@@ -480,7 +500,7 @@ class OctoModel:
             if k.startswith("image")
         }
         if self.text_processor is not None:
-            task_space["language_instruction"] = jax.tree_map(
+            task_space["language_instruction"] = jax.tree.map(
                 lambda arr: ("batch", *arr.shape[1:]),
                 self.example_batch["task"]["language_instruction"],
             )

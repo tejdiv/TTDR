@@ -117,7 +117,7 @@ def main(_):
         rng,
     ):
         # add batch dim to observations
-        observations = jax.tree_map(lambda x: x[None], observations)
+        observations = jax.tree.map(lambda x: x[None], observations)
         actions = pretrained_model.sample_actions(
             observations,
             tasks,
@@ -161,7 +161,7 @@ def main(_):
                 input("Press [Enter] when ready for taking the goal image. ")
                 obs = wait_for_obs(widowx_client)
                 obs = convert_obs(obs, FLAGS.im_size)
-                goal = jax.tree_map(lambda x: x[None], obs)
+                goal = jax.tree.map(lambda x: x[None], obs)
 
             # Format task for the model
             task = model.create_tasks(goals=goal)

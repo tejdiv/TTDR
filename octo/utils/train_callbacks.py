@@ -5,7 +5,10 @@ import os
 from typing import Callable, Mapping, Optional
 
 import flax
-from flax.training import orbax_utils
+try:
+    from flax.training import orbax_utils
+except ImportError:
+    orbax_utils = None
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -70,40 +73,53 @@ class SaveCallback(Callback):
                 logging.info(f"Created {self.save_dir}")
             # make checkpointers
             # only keep latest full TrainState
-            self.state_checkpointer = orbax.checkpoint.CheckpointManager(
-                tf.io.gfile.join(self.save_dir, "state"),
-                orbax.checkpoint.PyTreeCheckpointer(),
-                options=orbax.checkpoint.CheckpointManagerOptions(
-                    max_to_keep=1,
-                ),
-            )
-            # keep every params checkpoint
-            self.params_checkpointer = orbax.checkpoint.CheckpointManager(
-                self.save_dir,
-                orbax.checkpoint.PyTreeCheckpointer(),
-            )
+            try:
+                self.state_checkpointer = orbax.checkpoint.CheckpointManager(
+                    tf.io.gfile.join(self.save_dir, "state"),
+                    orbax.checkpoint.PyTreeCheckpointer(),
+                    options=orbax.checkpoint.CheckpointManagerOptions(
+                        max_to_keep=1,
+                    ),
+                )
+                self.params_checkpointer = orbax.checkpoint.CheckpointManager(
+                    self.save_dir,
+                    orbax.checkpoint.PyTreeCheckpointer(),
+                )
+            except AttributeError:
+                self.state_checkpointer = orbax.checkpoint.CheckpointManager(
+                    tf.io.gfile.join(self.save_dir, "state"),
+                    options=orbax.checkpoint.CheckpointManagerOptions(
+                        max_to_keep=1,
+                    ),
+                )
+                self.params_checkpointer = orbax.checkpoint.CheckpointManager(
+                    self.save_dir,
+                )
 
     def __call__(self, train_state: TrainState, step: int):
         if self.save_dir is not None:
             train_state.model.save_pretrained(
                 step, checkpoint_manager=self.params_checkpointer
             )
-            self.state_checkpointer.save(
-                step,
-                train_state,
-                {"save_args": orbax_utils.save_args_from_target(train_state)},
-            )
+            try:
+                self.state_checkpointer.save(
+                    step,
+                    train_state,
+                    {"save_args": orbax_utils.save_args_from_target(train_state)},
+                )
+            except (TypeError, AttributeError):
+                self.state_checkpointer.save(step, train_state)
 
 
 def remove_text(tasks: Data, zero_text_encoding: Optional[Data]):
     """Replaces language encoding inside task dict with that of the empty string.
 
-    zero_text_encoding = jax.tree_map(lambda x: x[0], text_processor.encode([""]))
+    zero_text_encoding = jax.tree.map(lambda x: x[0], text_processor.encode([""]))
     """
     if zero_text_encoding is None:
         zero_text_encoding = jnp.zeros((1,))
     if "language_instruction" in tasks:
-        new_language = jax.tree_map(
+        new_language = jax.tree.map(
             lambda x, example: jnp.broadcast_to(example[None], x.shape),
             tasks["language_instruction"],
             zero_text_encoding,
@@ -191,7 +207,7 @@ class ValidationCallback(Callback):
 
     def __post_init__(self):
         if self.text_processor is not None:
-            self.zero_text = jax.tree_map(
+            self.zero_text = jax.tree.map(
                 lambda x: x[0], self.text_processor.encode("")
             )
         else:
@@ -257,7 +273,7 @@ class ValidationCallback(Callback):
                 desc=name,
             ):
                 metrics.append(self.eval_step(train_state, batch))
-            metrics = jax.tree_map(lambda *xs: np.mean(xs), *metrics)
+            metrics = jax.tree.map(lambda *xs: np.mean(xs), *metrics)
             wandb_metrics[f"validation_{name}"] = metrics
         return wandb_metrics
 
@@ -276,7 +292,7 @@ class VisualizationCallback(Callback):
 
     def __post_init__(self):
         if self.text_processor is not None:
-            self.zero_text = jax.tree_map(
+            self.zero_text = jax.tree.map(
                 lambda x: x[0], self.text_processor.encode("")
             )
         else:
@@ -338,7 +354,7 @@ class RolloutVisualizationCallback(Callback):
 
     def __post_init__(self):
         if self.text_processor is not None:
-            self.zero_text = jax.tree_map(
+            self.zero_text = jax.tree.map(
                 lambda x: x[0], self.text_processor.encode("")
             )
         else:
