@@ -1,22 +1,40 @@
-# Lambda 8xA100 Setup
+# Mithril 8xA100 Setup
 
-## 1. Connect
+## 1. Reserve an instance
 
+Go to [mithril.ai](https://mithril.ai/) → Instances → Create.
+
+- **Instance type:** 8x A100 80GB SXM (204 CPU cores, 1520GB RAM, 14TB ephemeral)
+- **Region:** any US region with availability
+- **Duration:** minimum 3 hours, 1-hour increments, up to 2 weeks
+- **SSH keys:** upload your public key during setup
+- **Startup script (optional):** can add setup commands that run on allocation
+
+Reservations are non-cancellable. Instance becomes accessible ~15-20 min after start time.
+Spot bids are also available if you want cheaper preemptible access.
+
+## 2. Connect
+
+Once the instance shows "Allocated" status on the Instances page:
+
+```bash
+chmod 600 ~/.ssh/id_ed25519_mithril
+ssh -i ~/.ssh/id_ed25519_mithril ubuntu@35.87.44.192
 ```
-ssh -i ~/.ssh/id_ed25519_lambda ubuntu@35.87.44.192
-```
 
-## 2. Sync code (from local Mac)
+Replace `35.87.44.192` with the IP shown on the instance detail page.
 
-```
-rsync -avz -e "ssh -i ~/.ssh/id_ed25519_lambda" \
+## 3. Sync code (from local Mac)
+
+```bash
+rsync -avz -e "ssh -i ~/.ssh/id_ed25519_mithril" \
   /Users/tejasrao/Desktop/TTDR/ \
   ubuntu@35.87.44.192:~/TTDR/
 ```
 
-## 3. Create venv and install
+## 4. Create venv and install
 
-```
+```bash
 python3 -m venv ~/venv
 source ~/venv/bin/activate
 cd ~/TTDR
@@ -27,19 +45,17 @@ pip install -e .
 huggingface-cli login
 ```
 
-## 4. Verify GPUs
+## 5. Verify GPUs
 
-```
+```bash
 python -c "import jax; print(jax.devices())"
 ```
 
 Should print 8 CudaDevices.
 
-## 5. Download Bridge V2 data
+## 6. Download Bridge V2 data
 
-Source: RAIL Berkeley (the up-to-date copy Octo expects).
-
-```
+```bash
 mkdir -p /home/ubuntu/data/rlds/bridge_dataset/1.0.0
 
 wget -r -np -nH --cut-dirs=4 \
@@ -47,7 +63,7 @@ wget -r -np -nH --cut-dirs=4 \
   https://rail.eecs.berkeley.edu/datasets/bridge_release/data/tfds/bridge_dataset/1.0.0/
 ```
 
-## 6. Precompute encoder outputs
+## 7. Precompute encoder outputs
 
 Test with 3 trajectories first (single GPU):
 
@@ -79,9 +95,9 @@ huggingface-cli download tejasrao/ttdr-bridge-encodings encodings.h5 \
   --local-dir data/bridge_v2_encodings --repo-type dataset
 ```
 
-## 7. Train world model
+## 8. Train world model
 
-```
+```bash
 python -m recap.training.train_world_model \
   --config configs/train_wm.yaml
 ```
@@ -99,17 +115,16 @@ Should log:
 After making local code changes:
 
 ```bash
-# SCP/rsync code to Lambda
 rsync -avz \
-  -e "ssh -i ~/.ssh/id_ed25519_lambda" \
+  -e "ssh -i ~/.ssh/id_ed25519_mithril" \
   /Users/tejasrao/Desktop/TTDR/ \
   ubuntu@35.87.44.192:~/TTDR/
-
-# SSH in
-ssh -i ~/.ssh/id_ed25519_lambda ubuntu@35.87.44.192
 ```
 
+Then SSH in and run:
+
 ```bash
+ssh -i ~/.ssh/id_ed25519_mithril ubuntu@35.87.44.192
 source ~/venv/bin/activate
 cd ~/TTDR
 
