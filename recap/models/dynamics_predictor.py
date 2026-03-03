@@ -1,13 +1,11 @@
 """Dynamics predictor f_ψ: predicts next-step state in contrastive space Z'.
 
-Given current projected state z'_t, predicts the anchor ẑ'_{t+m} — where the
+Given projected state(s), predicts the anchor ẑ'_{t+m} — where the
 agent should be m steps into the future.
 
-Architecture: 3-hidden-layer MLP (width 1024), LayerNorm + GELU activations,
-L2-normalized output. Language conditioning is already encoded in z'_t via
-Octo's cross-attention between T5 language tokens and image tokens.
-
-~2.6M parameters.
+Architecture: MLP with LayerNorm + GELU activations, L2-normalized output.
+Hidden dim, num layers, and output dim are configurable. Language conditioning
+is already encoded in the input via Octo's cross-attention.
 """
 
 import flax.linen as nn
@@ -18,25 +16,27 @@ class DynamicsPredictor(nn.Module):
     """Predicts next-step anchor in contrastive space Z'.
 
     Input:
-        z_prime: projected state h(φ(o_t)),  shape (batch, z_dim)     [256]
+        z_prime: concatenated projected states [h(read[t-1]), h(read[t,t-1])],
+                 shape (batch, 2 * proj_dim)
 
     Output:
-        anchor: predicted ẑ'_{t+m},          shape (batch, z_dim)     [256, L2-normalized]
+        anchor: predicted ẑ'_{t+m}, shape (batch, output_dim), L2-normalized.
     """
 
     hidden_dim: int = 1024
     num_layers: int = 3
+    output_dim: int = None  # If None, infer from input (backward compat)
 
     @nn.compact
     def __call__(self, z_prime: jnp.ndarray, *, train: bool = False) -> jnp.ndarray:
         """
         Args:
-            z_prime: Projected state, shape (batch, z_dim).
+            z_prime: Projected state (or concatenated states), shape (batch, input_dim).
             train: Whether in training mode (unused, kept for API consistency).
         Returns:
-            anchor: L2-normalized predicted next state, shape (batch, z_dim).
+            anchor: L2-normalized predicted next state, shape (batch, out_dim).
         """
-        z_dim = z_prime.shape[-1]
+        out_dim = self.output_dim if self.output_dim is not None else z_prime.shape[-1]
         x = z_prime
 
         for _ in range(self.num_layers):
@@ -44,6 +44,6 @@ class DynamicsPredictor(nn.Module):
             x = nn.LayerNorm()(x)
             x = nn.gelu(x)
 
-        x = nn.Dense(z_dim)(x)
+        x = nn.Dense(out_dim)(x)
         x = x / (jnp.linalg.norm(x, axis=-1, keepdims=True) + 1e-8)
         return x

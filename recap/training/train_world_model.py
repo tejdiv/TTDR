@@ -37,27 +37,29 @@ class WorldModel(nn.Module):
     dynamics_predictor_kwargs: Dict[str, Any]
 
     @nn.compact
-    def __call__(self, z_t, z_target, *, train=False):
+    def __call__(self, z_t, z_t1, z_target, *, train=False):
         """Forward pass: project, predict, and return projected target.
 
-        Args:
-            z_t: Encoder output at time t, shape (batch, 768).
-            z_target: Encoder output at time t+m, shape (batch, 768).
-            train: Training mode flag.
+        Inputs come from a single Octo forward pass at time t:
+            z_t:     read[t-1]      — position 0 readout (1-frame context)
+            z_t1:    read[t, t-1]   — position 1 readout (2-frame context)
+            z_target: read[t+m, t+m-1] — position 1 readout m steps later
 
         Returns:
-            predicted: Predicted anchor ẑ'_{t+m}, shape (batch, 256).
-            target_proj: Projected actual z'_{t+m}, shape (batch, 256).
+            predicted: Predicted anchor, shape (batch, proj_dim).
+            target_proj: Projected actual target, shape (batch, proj_dim).
         """
         h = ProjectionHead(**self.projection_head_kwargs)
         f_psi = DynamicsPredictor(**self.dynamics_predictor_kwargs)
 
-        # Project current and target states into contrastive space
-        z_prime_t = h(z_t)            # (batch, 256)
-        z_prime_target = h(z_target)  # (batch, 256) — stop gradient for target?
+        # Shared projection head for all readouts
+        z_prime_t = h(z_t)            # (batch, proj_dim)
+        z_prime_t1 = h(z_t1)          # (batch, proj_dim)
+        z_prime_target = h(z_target)  # (batch, proj_dim)
 
-        # Predict anchor from current state
-        predicted = f_psi(z_prime_t, train=train)  # (batch, 256)
+        # Dynamics predictor: concat projected [read[t-1], read[t,t-1]] → predict target
+        dynamics_input = jnp.concatenate([z_prime_t, z_prime_t1], axis=-1)  # (batch, 2*proj_dim)
+        predicted = f_psi(dynamics_input, train=train)  # (batch, proj_dim)
 
         return predicted, z_prime_target
 
@@ -77,9 +79,10 @@ def create_train_state(config: dict, rng: jax.Array) -> train_state.TrainState:
     # Dummy inputs for initialization
     encoder_dim = 768  # Octo-Base
     dummy_z = jnp.zeros((2, encoder_dim))
+    dummy_z1 = jnp.zeros((2, encoder_dim))
     dummy_target = jnp.zeros((2, encoder_dim))
 
-    params = model.init(rng, dummy_z, dummy_target, train=False)["params"]
+    params = model.init(rng, dummy_z, dummy_z1, dummy_target, train=False)["params"]
 
     # Count parameters
     param_count = sum(x.size for x in jax.tree_util.tree_leaves(params))
@@ -103,13 +106,14 @@ def create_train_state(config: dict, rng: jax.Array) -> train_state.TrainState:
     )
 
 
-def make_train_step(replicated_sharding, dp_sharding, temperature: float):
+def make_train_step(replicated_sharding, dp_sharding, temperature: float, intra_weight: float = 0.0):
     """Create a sharded train_step function.
 
     Args:
         replicated_sharding: NamedSharding for replicated params/metrics.
         dp_sharding: NamedSharding for data-parallel batch sharding.
         temperature: InfoNCE temperature (static).
+        intra_weight: Weight for intra-trajectory loss (0.0 = cross-only).
 
     Returns:
         JIT-compiled train_step function with correct shardings.
@@ -130,10 +134,17 @@ def make_train_step(replicated_sharding, dp_sharding, temperature: float):
             predicted, target_proj = state.apply_fn(
                 {"params": params},
                 batch["z_t"],
+                batch["z_t1"],
                 batch["z_target"],
                 train=True,
             )
-            loss = infonce_loss(predicted, target_proj, temperature=temperature)
+            traj_ids = batch["traj_id"]
+            loss = infonce_loss(
+                predicted, target_proj,
+                temperature=temperature,
+                traj_ids=traj_ids,
+                intra_weight=intra_weight,
+            )
             return loss, {"loss": loss, "predicted": predicted, "target_proj": target_proj}
 
         (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
@@ -191,11 +202,12 @@ def main(_):
     logging.info(f"Loaded {dataset.num_samples:,} transitions, {len(dataset)} batches/epoch")
 
     temperature = config["loss"]["temperature"]
+    intra_weight = config["loss"].get("intra_weight", 0.0)
     total_steps = config["training"]["total_steps"]
     os.makedirs(config["output"]["checkpoint_dir"], exist_ok=True)
 
     # Build sharded train_step
-    train_step = make_train_step(replicated_sharding, dp_sharding, temperature)
+    train_step = make_train_step(replicated_sharding, dp_sharding, temperature, intra_weight=intra_weight)
 
     # Training loop
     step = 0

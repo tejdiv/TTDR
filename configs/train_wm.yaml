@@ -9,15 +9,17 @@ data:
 
 model:
   projection_head:
-    hidden_dim: 512
-    output_dim: 256                        # Contrastive space Z' dimensionality
+    hidden_dim: 1024                       # was 512
+    output_dim: 512                        # Contrastive space Z' dimensionality (was 256)
 
   dynamics_predictor:
-    hidden_dim: 1024
-    num_layers: 3
+    hidden_dim: 2048                       # was 1024
+    num_layers: 4                          # was 3
+    output_dim: 512                        # Must match projection head output_dim
 
 loss:
   temperature: 0.1                         # InfoNCE temperature τ
+  intra_weight: 0.5                        # 0.0 = cross-traj only, 1.0 = intra-traj only
 
 training:
   lr: 3.0e-4

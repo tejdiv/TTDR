@@ -48,7 +48,7 @@ wget -r -np -nH --cut-dirs=4 \
 
 ## 6. Precompute encoder outputs
 
-Test with 3 trajectories first:
+Test with 3 trajectories first (single GPU):
 
 ```bash
 mkdir -p data/bridge_v2_encodings
@@ -56,23 +56,20 @@ python scripts/precompute_encodings.py \
   --data_dir /home/ubuntu/data/rlds \
   --output_dir data/bridge_v2_encodings \
   --chunk_size 4 \
-  --batch_size 32 \
+  --batch_size 64 \
+  --window_size 2 \
   --max_trajectories 3
 ```
 
-Then run the full precompute (all ~60k trajectories):
+Then run the full precompute across all 8 GPUs (~2-3hrs):
 
 ```bash
-python scripts/precompute_encodings.py \
-  --data_dir /home/ubuntu/data/rlds \
-  --output_dir data/bridge_v2_encodings \
-  --chunk_size 4 \
-  --batch_size 64
+bash scripts/launch_precompute.sh
 ```
 
-This runs Octo's frozen encoder over all Bridge V2
-trajectories and caches (z_t, z_{t+m}) to HDF5.
-One-time cost.
+This runs Octo's frozen encoder (window_size=2) over all Bridge V2
+trajectories in parallel across 8 GPUs, then merges shards into a
+single `encodings.h5` with (z_t, z_t1, z_target, traj_id).
 
 ## 7. Train world model
 
@@ -84,7 +81,7 @@ python -m recap.training.train_world_model \
 Should log:
 - `JAX devices: 8`
 - `batch_size 1024, 128 per device`
-- `World model parameters: ~3.8M`
+- `World model parameters: ~15M`
 - Loss decreasing, retrieval accuracy increasing
 
 ---
@@ -109,12 +106,17 @@ ssh -i ~/.ssh/id_ed25519_lambda ubuntu@129.213.145.219
 ```bash
 source ~/venv/bin/activate
 cd ~/TTDR
+# Quick test (single GPU, 3 trajectories):
 python scripts/precompute_encodings.py \
   --data_dir /home/ubuntu/data/rlds \
   --output_dir data/bridge_v2_encodings \
   --chunk_size 4 \
-  --batch_size 32 \
+  --batch_size 64 \
+  --window_size 2 \
   --max_trajectories 3
+
+# Full run (8 GPUs, ~2-3hrs):
+bash scripts/launch_precompute.sh
 ```
 
 ## Re-activate venv (if you disconnect)

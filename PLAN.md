@@ -92,23 +92,11 @@ configs/train_wm.yaml
 
 ---
 
-## Part 3: Value Function
-
-- MLP: (256+256) → 512 → 256 → 1. ~2M params. Flax.
-- Train on Octo zero-shot rollouts (standard dynamics), predict tracking error.
-- Loss: MSE, ~5k steps.
-
-```
-recap/models/value_function.py
-```
-
----
-
-## Part 4: RECAP Test-Time Adaptation
+## Part 3: RECAP Test-Time Adaptation
 
 ```
 FROZEN: encoder φ, world model (h + f_ψ)
-ADAPTED: LoRA on DiffusionActionHead (rank=8), value function V_ϕ
+ADAPTED: LoRA on DiffusionActionHead (rank=8)
 
 for each step t:
     anchor g = f_ψ(h(φ(o_t)))
@@ -116,8 +104,14 @@ for each step t:
     r_aux = -||h(φ(o_{t+m})) - g||² / (||g - h(φ(o_t))||² + ε)
     buffer.append(...)
 
-    every M chunks: retrain V_ϕ + LoRA via advantage-conditioned BC
+    every M chunks:
+        rewards = [r_1, r_2, ..., r_M] from buffer
+        A_i = (r_i - mean(rewards)) / (std(rewards) + ε)
+        update LoRA via advantage-conditioned BC (weighted by A_i)
 ```
+
+No learned value function. Advantages are computed by normalizing tracking rewards
+within each buffer batch — the batch mean replaces V_ϕ as the baseline.
 
 LoRA targets: `nn.Dense` in DiffusionActionHead's MLPResNet (`action_heads.py:386` → `diffusion.py`).
 
@@ -132,7 +126,7 @@ configs/adapt.yaml
 
 ---
 
-## Part 5: Evaluation
+## Part 4: Evaluation
 
 | Condition | Method |
 |---|---|
@@ -158,7 +152,8 @@ recap/eval/perturbation_eval.py
 1. Encoder z_t from sim clusters near z_t from real Bridge V2 (domain gap check)
 2. World model retrieval accuracy >60% on held-out Bridge V2
 3. Tracking reward correlates with chunk-level success
-4. RECAP recovers 30-60% of lost performance within 5-10 cycles
+4. Buffer-normalized advantages show meaningful variance across chunks within a batch
+5. RECAP recovers 30-60% of lost performance within 5-10 cycles
 
 ## Key Risk
 
