@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch parallel precompute across 8 GPUs, then merge shards.
+# Launch parallel precompute across GPUs, then merge shards.
 #
 # Usage:
 #   bash scripts/launch_precompute.sh
@@ -7,12 +7,13 @@
 
 set -e
 
-NUM_SHARDS=8
-DATA_DIR=/home/ubuntu/data/rlds
-OUTPUT_DIR=data/bridge_v2_encodings
-BATCH_SIZE=64
-CHUNK_SIZE=4
-WINDOW_SIZE=2
+# Defaults — override via env vars (e.g. NUM_SHARDS=4 bash scripts/launch_precompute.sh)
+NUM_SHARDS=${NUM_SHARDS:-8}
+DATA_DIR=${DATA_DIR:-/home/ubuntu/data/rlds}
+OUTPUT_DIR=${OUTPUT_DIR:-data/bridge_v2_encodings}
+BATCH_SIZE=${BATCH_SIZE:-64}
+CHUNK_SIZE=${CHUNK_SIZE:-4}
+WINDOW_SIZE=${WINDOW_SIZE:-2}
 HF_REPO=""
 
 # Parse optional --hf flag

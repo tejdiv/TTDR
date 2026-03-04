@@ -27,7 +27,8 @@ from recap.losses.contrastive import infonce_loss
 from recap.data.oxe_contrastive import CachedContrastiveDataset
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("config", "configs/train_wm.yaml", "Path to config file.")
+flags.DEFINE_string("config", "configs/train_wm.yaml", "Path to config file.",
+                    allow_override=True)
 
 
 class WorldModel(nn.Module):
@@ -119,13 +120,6 @@ def make_train_step(replicated_sharding, dp_sharding, temperature: float, intra_
         JIT-compiled train_step function with correct shardings.
     """
 
-    @jax.jit(
-        # state is replicated, batch is data-parallel
-        in_shardings=(replicated_sharding, dp_sharding),
-        out_shardings=(replicated_sharding, replicated_sharding),
-        # allows jax to modify `state` in-place, saving memory
-        donate_argnums=0,
-    )
     def train_step(
         state: train_state.TrainState,
         batch: dict,
@@ -166,6 +160,13 @@ def make_train_step(replicated_sharding, dp_sharding, temperature: float, intra_
         }
         return state, metrics
 
+    # JAX 0.4.20: jax.jit requires fun as first positional arg
+    train_step = jax.jit(
+        train_step,
+        in_shardings=(replicated_sharding, dp_sharding),
+        out_shardings=(replicated_sharding, replicated_sharding),
+        donate_argnums=0,
+    )
     return train_step
 
 
@@ -245,13 +246,14 @@ def main(_):
                 )
                 logging.info(f"Saved checkpoint at step {step}")
 
-    # Final save
-    checkpoints.save_checkpoint(
-        config["output"]["checkpoint_dir"],
-        state,
-        step,
-        keep=3,
-    )
+    # Final save (skip if already saved by save_every)
+    if step % config["training"]["save_every"] != 0:
+        checkpoints.save_checkpoint(
+            config["output"]["checkpoint_dir"],
+            state,
+            step,
+            keep=3,
+        )
     logging.info(f"Training complete. Final step {step}, final loss {metrics['loss']:.4f}")
 
 

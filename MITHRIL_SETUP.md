@@ -38,11 +38,16 @@ rsync -avz -e "ssh -i ~/.ssh/id_ed25519_mithril" \
 python3 -m venv ~/venv
 source ~/venv/bin/activate
 cd ~/TTDR
-pip install -U jax[cuda12] flax optax tensorflow numpy \
-  orbax-checkpoint tensorstore h5py absl-py pyyaml \
-  scipy wandb tqdm transformers einops huggingface_hub
+pip install "jax[cuda12]==0.4.20" flax==0.7.5 optax==0.1.5 \
+  tensorflow==2.15.0 tensorflow_probability==0.23.0 \
+  tensorflow_datasets==4.9.2 \
+  chex==0.1.85 distrax==0.1.5 ml_dtypes==0.2.0 \
+  orbax-checkpoint==0.5.3 tensorstore==0.1.45 h5py absl-py pyyaml \
+  numpy==1.24.3 scipy wandb tqdm transformers==4.36.2 einops \
+  huggingface_hub
+pip install --no-deps "dlimp @ git+https://github.com/kvablack/dlimp.git"
 pip install -e .
-huggingface-cli login
+python -c "from huggingface_hub import login; login()"
 ```
 
 ## 5. Verify GPUs

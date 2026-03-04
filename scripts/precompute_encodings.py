@@ -203,6 +203,10 @@ def main(_):
             skip_traj = False
             for key in traj["observation"]:
                 if key in IMAGE_KEYS and traj["observation"][key].dtype == object:
+                    # Skip empty camera streams (e.g., debug datasets without secondary/wrist)
+                    first_frame = traj["observation"][key][0]
+                    if isinstance(first_frame, (bytes, np.bytes_)) and len(first_frame) == 0:
+                        continue
                     decoded = decode_all_frames(traj["observation"][key])
                     if decoded is None:
                         skip_traj = True
@@ -210,6 +214,16 @@ def main(_):
                     decoded_images[key] = decoded
             if skip_traj:
                 continue
+            if not decoded_images:
+                logging.warning(f"Trajectory {traj_count}: no valid image keys, skipping")
+                continue
+
+            # Resize images to match Octo's expected resolution (256x256)
+            for key in decoded_images:
+                imgs = decoded_images[key]
+                if imgs.shape[1] != 256 or imgs.shape[2] != 256:
+                    resized = tf.image.resize(imgs, [256, 256]).numpy().astype(np.uint8)
+                    decoded_images[key] = resized
 
             # Build all windows and encode all frames
             # For window_size=2: T-1 overlapping windows → T-1 readouts
