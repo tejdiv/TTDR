@@ -1,0 +1,167 @@
+{
+  "timestamp": "2026-03-06T15:51:48.918976+00:00",
+  "job": {
+    "id": "w5d09j3",
+    "created_at": "2026-03-06T15:22:52.218Z",
+    "current_status": "TRAINING_JOB_COMPLETED",
+    "error_message": null,
+    "instance_type": {
+      "id": "H100:4",
+      "name": "H100:4 - 4 H100 GPUs, 320 GiB VRAM",
+      "memory_limit_mib": 483328,
+      "millicpu_limit": 64000,
+      "gpu_count": 4,
+      "gpu_type": "H100",
+      "gpu_memory_limit_mib": 327680
+    },
+    "updated_at": "2026-03-06T15:22:52.510Z",
+    "training_project_id": "yqv62xw",
+    "training_project": {
+      "id": "yqv62xw",
+      "name": "ttdr-train"
+    },
+    "name": "job-2"
+  },
+  "checkpoint_artifacts": [
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_10000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=T016C%2B%2Bw0kn%2B%2FunDz53rkaMO4%2F8%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_10000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:40:47+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_10000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=ypuB9u1V8J0BgTu%2FG1GojuMEcEw%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_10000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:40:47+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_15000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=%2Fak7b80rCgunBVk5JS0s5EfWJT4%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_15000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:41:57+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_15000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=htZ35cO75hINf7Xk86Kc1CE1TJ0%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_15000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:41:57+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_20000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=DyKXBQYI7c3zwuzH8XBu70%2F7Kb8%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_20000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:42:34+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_20000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=Q8vKCg6QwqKO%2BbPfZA%2Bhc2gFuDY%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_20000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:42:35+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_25000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=Wglypzgb4lFC4Y%2BKBxAK37teRrs%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_25000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:43:44+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_25000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=5OUCmFlo0d0jqMeJRGJto51AIwE%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_25000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:43:45+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_30000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=8VtQdB%2BDvRr4%2BN2G%2BED9TzCWF%2BQ%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_30000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:44:22+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_30000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=tlvMKz8%2BxMlpW3VCWzBxvjPfkSA%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_30000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:44:22+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_35000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=d04CCVSX71T0%2FMIUyN64aeA8nwU%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_35000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:45:32+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_35000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=vnUXirNuGhZDOcoHkAK5W9aX8vE%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_35000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:45:32+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_40000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=MFlkQVBomXwq2f5yJgN7WzWAGl4%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_40000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:46:45+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_40000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=7QmdzskfT5q%2FdylRPqUS1SLhEhI%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_40000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:46:45+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_45000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=jAHr5fV4J8UqPOl93rgTY439ah4%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_45000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:47:24+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_45000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=ZjWhRxW6E%2FzC2WaKjfnmR5z2A2g%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_45000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:47:24+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_5000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=DcWxugC2LrU3KHvNxeXvosNq4bo%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_5000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:39:37+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_5000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=hBvxXJV8X2%2FcSQWzNINNUG8DFF8%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_5000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:39:37+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_50000/_METADATA?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=9vE5Keh66YLg4jyPdMqJFyn2enM%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_50000/_METADATA",
+      "node_rank": 0,
+      "size_bytes": 38761,
+      "last_modified": "2026-03-06T15:48:33+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/yqv62xw/jobs/w5d09j3/rank-0/checkpoint_50000/checkpoint?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=QzJl1snp4rRbbvlxF%2BMM93TAi3Y%3D&Expires=1773417108",
+      "relative_file_name": "checkpoint_50000/checkpoint",
+      "node_rank": 0,
+      "size_bytes": 210346535,
+      "last_modified": "2026-03-06T15:48:34+00:00"
+    }
+  ]
+}

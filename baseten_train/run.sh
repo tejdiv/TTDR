@@ -25,18 +25,74 @@ pip install -e .
 python -c "import huggingface_hub; huggingface_hub.login(token='$hf_token')"
 
 # ---- Verify GPUs ----
-python -c "import jax; print(f'JAX devices: {jax.devices()}')"
+python -c "import jax; devs = jax.devices(); print(f'JAX devices: {devs}'); assert any('gpu' in str(d).lower() or 'cuda' in str(d).lower() for d in devs), 'No GPU!'"
 
-# ---- Download Bridge V2 data ----
-mkdir -p /home/data/rlds/bridge_dataset/1.0.0
-wget -r -np -nH --cut-dirs=4 \
-  -P /home/data/rlds/bridge_dataset/1.0.0 \
-  https://rail.eecs.berkeley.edu/datasets/bridge_release/data/tfds/bridge_dataset/1.0.0/
+# ---- Storage setup ----
+# Download goes to project cache (persists across ALL jobs in this project)
+if [ -z "$BT_PROJECT_CACHE_DIR" ]; then
+  echo "WARNING: BT_PROJECT_CACHE_DIR not set. Using /tmp for download (NOT persistent!)."
+  CACHE_DIR=/tmp
+else
+  echo "OK: Project cache available at $BT_PROJECT_CACHE_DIR"
+  CACHE_DIR="$BT_PROJECT_CACHE_DIR"
+fi
+DATA_DIR="$CACHE_DIR/rlds"
+ENCODING_DIR="${BT_CHECKPOINT_DIR:-/tmp}/encoding_shards"
+echo "Download dir (cached):   $DATA_DIR"
+echo "Encoding shards dir:     $ENCODING_DIR"
+
+# ---- Download Bridge V2 data (skip if cached) ----
+# TFDS expects: DATA_DIR/bridge_dataset/1.0.0/*.tfrecord*
+EXPECTED_DIR="$DATA_DIR/bridge_dataset/1.0.0"
+
+# Check anywhere under CACHE_DIR for existing shards
+EXISTING_SHARDS=$(find "$CACHE_DIR" -name "bridge_dataset-train.tfrecord-*" -type f 2>/dev/null | wc -l)
+echo "Existing shards in project cache: $EXISTING_SHARDS"
+
+if [ "$EXISTING_SHARDS" -ge 1024 ]; then
+  echo "=== FOUND $EXISTING_SHARDS shards in cache — skipping download ==="
+elif [ -f "ttdr-precompute_3yd4743_checkpoints.json" ]; then
+  echo "=== DOWNLOADING FROM S3 (previous job's cached data) ==="
+  python download_from_s3.py \
+    --json ttdr-precompute_3yd4743_checkpoints.json \
+    --output_dir "$CACHE_DIR"
+else
+  echo "=== DOWNLOADING BRIDGE V2 FROM SOURCE ==="
+  mkdir -p "$EXPECTED_DIR"
+  wget -c -r -np -nH --cut-dirs=4 \
+    --reject "index.html*" \
+    -P "$DATA_DIR" \
+    https://rail.eecs.berkeley.edu/datasets/bridge_release/data/tfds/bridge_dataset/1.0.0/
+fi
+
+# ---- Find where tfrecords actually are and set DATA_DIR accordingly ----
+# TFDS expects: DATA_DIR/bridge_dataset/1.0.0/*.tfrecord*
+TFRECORD_FILE=$(find "$CACHE_DIR" -name "bridge_dataset-train.tfrecord-00000-of-01024" -type f | head -1)
+if [ -z "$TFRECORD_FILE" ]; then
+  echo "ERROR: No tfrecord files found anywhere under $CACHE_DIR"
+  find "$CACHE_DIR" -type f | head -10
+  exit 1
+fi
+TFRECORD_DIR=$(dirname "$TFRECORD_FILE")
+# DATA_DIR needs to be two levels above: DATA_DIR/bridge_dataset/1.0.0/
+DATA_DIR=$(dirname "$(dirname "$TFRECORD_DIR")")
+echo "TFRecords at: $TFRECORD_DIR"
+echo "DATA_DIR set to: $DATA_DIR"
+
+# ---- Verify ----
+SHARD_COUNT=$(find "$TFRECORD_DIR" -name "bridge_dataset-train.tfrecord-*" -type f | wc -l)
+echo "Found $SHARD_COUNT train shards"
+if [ "$SHARD_COUNT" -lt 1024 ]; then
+  echo "ERROR: Expected 1024 train shards, found $SHARD_COUNT."
+  exit 1
+fi
+echo "All 1024 train shards present."
 
 # ---- Precompute (4 GPUs, uploads to HF) ----
 export NUM_SHARDS=4
-export DATA_DIR=/home/data/rlds
-bash scripts/launch_precompute.sh --hf tejasrao/ttdr-bridge-encodings
+export DATA_DIR
+export OUTPUT_DIR="$ENCODING_DIR"
+bash scripts/launch_precompute.sh --hf tejasrao/ttdr-bridge-encodings-v1
 
 # ---- Patch config to save checkpoints directly to BT_CHECKPOINT_DIR ----
 python -c "

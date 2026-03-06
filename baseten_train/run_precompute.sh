@@ -124,8 +124,8 @@ echo "All 1024 train shards present."
 export NUM_SHARDS=4
 export DATA_DIR
 export OUTPUT_DIR="$ENCODING_DIR"
-bash scripts/launch_precompute.sh --hf tejasrao/ttdr-bridge-encodings
+bash scripts/launch_precompute.sh --hf tejasrao/ttdr-bridge-encodings-v1
 
 echo ""
-echo "Done. Encodings uploaded to HF: tejasrao/ttdr-bridge-encodings"
+echo "Done. Encodings uploaded to HF: tejasrao/ttdr-bridge-encodings-v1"
 echo "Everything persisted in BT_CHECKPOINT_DIR."
