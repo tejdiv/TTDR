@@ -17,9 +17,14 @@ model:
     num_layers: 4                          # was 3
     output_dim: 512                        # Must match projection head output_dim
 
+  value_head:
+    hidden_dim: 256
+    num_layers: 2
+
 loss:
   temperature: 0.1                         # InfoNCE temperature τ
   intra_weight: 0.5                        # 0.0 = cross-traj only, 1.0 = intra-traj only
+  value_loss_weight: 1.0                   # MSE weight for value head (relative to InfoNCE)
 
 training:
   lr: 3.0e-4

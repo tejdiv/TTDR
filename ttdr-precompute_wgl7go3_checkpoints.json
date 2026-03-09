@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-03-06T15:18:01.019446+00:00",
+  "job": {
+    "id": "wgl7go3",
+    "created_at": "2026-03-06T14:20:16.660Z",
+    "current_status": "TRAINING_JOB_FAILED",
+    "error_message": null,
+    "instance_type": {
+      "id": "H100:4",
+      "name": "H100:4 - 4 H100 GPUs, 320 GiB VRAM",
+      "memory_limit_mib": 483328,
+      "millicpu_limit": 64000,
+      "gpu_count": 4,
+      "gpu_type": "H100",
+      "gpu_memory_limit_mib": 327680
+    },
+    "updated_at": "2026-03-06T14:20:16.864Z",
+    "training_project_id": "jwdgokw",
+    "training_project": {
+      "id": "jwdgokw",
+      "name": "ttdr-precompute"
+    },
+    "name": "job-10"
+  },
+  "checkpoint_artifacts": [
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/jwdgokw/jobs/wgl7go3/rank-0/encoding_shards/encodings.h5?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=9sTUhceBY6ECkQmzzjHq64XluPM%3D&Expires=1773415080",
+      "relative_file_name": "encoding_shards/encodings.h5",
+      "node_rank": 0,
+      "size_bytes": 9842326551,
+      "last_modified": "2026-03-06T14:51:47+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/jwdgokw/jobs/wgl7go3/rank-0/encoding_shards/encodings_shard_0.h5?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=ICNHhD788iMwv238cskUo5Tfu20%3D&Expires=1773415080",
+      "relative_file_name": "encoding_shards/encodings_shard_0.h5",
+      "node_rank": 0,
+      "size_bytes": 2653073704,
+      "last_modified": "2026-03-06T14:46:47+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/jwdgokw/jobs/wgl7go3/rank-0/encoding_shards/encodings_shard_1.h5?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=eX5QE5nJiHTqOWn2NIa2bjK%2FAEI%3D&Expires=1773415081",
+      "relative_file_name": "encoding_shards/encodings_shard_1.h5",
+      "node_rank": 0,
+      "size_bytes": 2671948072,
+      "last_modified": "2026-03-06T14:46:47+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/jwdgokw/jobs/wgl7go3/rank-0/encoding_shards/encodings_shard_2.h5?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=z%2BeAlM6ZkVbaYLyW76YoNOdo7Wk%3D&Expires=1773415081",
+      "relative_file_name": "encoding_shards/encodings_shard_2.h5",
+      "node_rank": 0,
+      "size_bytes": 2662510888,
+      "last_modified": "2026-03-06T14:46:47+00:00"
+    },
+    {
+      "url": "https://bt-training-qkrmxxp-8f885141-575b-4579-ac65-af1df2d688b8.s3.amazonaws.com/training_projects/jwdgokw/jobs/wgl7go3/rank-0/encoding_shards/encodings_shard_3.h5?AWSAccessKeyId=AKIA4FWSEGGQU5RCDCKX&Signature=oUI8beZoUClAKPPek0%2BY1H8cbfA%3D&Expires=1773415081",
+      "relative_file_name": "encoding_shards/encodings_shard_3.h5",
+      "node_rank": 0,
+      "size_bytes": 2634182952,
+      "last_modified": "2026-03-06T14:46:47+00:00"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+# Phase 1: VQ-VAE tokenizer training on Bridge V2 frames
+# Encodes 256x256 RGB → 16x16 grid of discrete tokens (K=512)
+
+data:
+  cache_dir: null                        # Bridge V2 tfds cache dir (null = default)
+  batch_size: 256                        # 32 per device × 8 GPUs
+  shuffle_buffer: 50000                  # 50K × 256×256×3 × 4B = ~37GB — fits in CPU RAM
+  seed: 42
+
+model:
+  patch_size: 16                         # 256/16 = 16x16 spatial grid = 256 tokens
+  embed_dim: 512                         # ViT encoder + codebook dimension
+  num_codes: 512                         # Codebook size K
+  encoder_layers: 6                      # ViT depth
+  encoder_heads: 8
+  commitment_cost: 0.25                  # VQ commitment loss weight
+
+loss:
+  vq_weight: 1.0                         # Weight of VQ loss relative to reconstruction
+
+training:
+  lr: 3.0e-4
+  warmup_steps: 1000
+  total_steps: 100000
+  weight_decay: 0.01
+  grad_clip: 1.0
+  log_every: 100
+  save_every: 10000
+
+output:
+  checkpoint_dir: "checkpoints/vqvae_tokenizer"

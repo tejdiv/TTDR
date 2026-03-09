@@ -202,7 +202,10 @@ class OctoModel:
             actions: (*sample_shape, batch_size, action_horizon, action_dim)
         """
         if timestep_pad_mask is None:
-            timestep_pad_mask = observations["timestep_pad_mask"]
+            if "timestep_pad_mask" in observations:
+                timestep_pad_mask = observations["timestep_pad_mask"]
+            else:
+                timestep_pad_mask = observations["pad_mask"]
 
         transformer_outputs = self.run_transformer(
             observations, tasks, timestep_pad_mask, train=train

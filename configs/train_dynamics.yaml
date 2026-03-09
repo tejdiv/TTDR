@@ -1,0 +1,46 @@
+# Phase 2: Dynamics transformer training on tokenized Bridge V2 trajectories
+# Predicts future frame tokens from two context frames + language instruction
+
+lang_encoder: "openai/clip-vit-base-patch32"   # Frozen CLIP text encoder (512-dim)
+
+tokenizer:
+  checkpoint_dir: "checkpoints/vqvae_tokenizer"   # Frozen Phase 1 checkpoint
+  patch_size: 16
+  embed_dim: 512
+  num_codes: 512
+  encoder_layers: 6
+  encoder_heads: 8
+
+data:
+  cache_dir: null                        # Bridge V2 tfds cache dir
+  batch_size: 256                        # 32 per device × 8 GPUs
+  prediction_horizon: 3                  # m: predict m steps into the future
+  shuffle_buffer: 10000                  # Keep small — 3 frames/sample × 256×256×3 × 4B = ~2.3GB
+  seed: 42
+
+model:
+  num_positions: 256                     # 16x16 spatial tokens per frame
+  embed_dim: 512
+  num_heads: 8
+  num_layers: 12                         # Transformer depth
+  mlp_ratio: 4.0
+  dropout_rate: 0.1
+  value_hidden_dim: 256                  # Value head MLP
+  value_num_layers: 2
+  num_lang_tokens: 4                     # Language projected into 4 tokens
+
+loss:
+  value_loss_weight: 1.0                 # MSE weight for V (relative to CE)
+
+training:
+  lr: 1.0e-4
+  warmup_steps: 2000
+  total_steps: 100000
+  weight_decay: 0.01
+  grad_clip: 1.0
+  log_every: 100
+  eval_every: 2000
+  save_every: 10000
+
+output:
+  checkpoint_dir: "checkpoints/dynamics_transformer"

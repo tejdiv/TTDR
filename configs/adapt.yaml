@@ -1,0 +1,39 @@
+# RECAP adaptation + evaluation config
+
+env:
+  perturbation: "object_friction"
+  perturbation_scale: 0.3
+
+world_model:
+  # Local: "checkpoints/world_model"
+  # HuggingFace: "hf://4manifold/ttdr-world-model"
+  checkpoint: "hf://4manifold/ttdr-world-model"
+  # Must match train_wm.yaml model config exactly
+  projection_head:
+    hidden_dim: 1024
+    output_dim: 512
+  dynamics_predictor:
+    hidden_dim: 2048
+    num_layers: 4
+    output_dim: 512
+  value_head:
+    hidden_dim: 256
+    num_layers: 2
+
+lora:
+  rank: 8
+  backbone_lora: false              # Action-head-only LoRA (backbone stays frozen for valid WM signals)
+
+adaptation:
+  lr: 1.0e-4
+  update_every_M: 4                # Update LoRA every M chunks
+  num_bc_steps: 50                 # Gradient steps per LoRA update
+  bc_batch_size: 16
+  min_buffer: 16                   # Minimum buffer entries before first update
+  num_episodes: 5
+  K: 3                             # Parallel samples per step
+  recap_alpha: 1.0                 # Weight on conditioned loss term
+  indicator_top_frac: 0.3          # Fraction of best-of-K candidates that get I=1 (0.0–1.0)
+
+buffer:
+  max_size: 256

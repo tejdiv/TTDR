@@ -40,7 +40,7 @@ from recap.data.oxe_contrastive import make_bridge_trajectory_dataset
 FLAGS = flags.FLAGS
 flags.DEFINE_string("data_dir", None, "Path to RLDS data directory.")
 flags.DEFINE_string("output_dir", None, "Path to output HDF5 cache directory.")
-flags.DEFINE_string("checkpoint", "hf://rail-berkeley/octo-base-1.5",
+flags.DEFINE_string("checkpoint", "hf://rail-berkeley/octo-base",
                     "Octo checkpoint to load.")
 flags.DEFINE_integer("chunk_size", 4, "Action chunk size m (frames between z_t and z_{t+m}).")
 flags.DEFINE_integer("batch_size", 64, "Batch size for encoder forward pass.")
@@ -273,9 +273,9 @@ def main(_):
                         for k, v in obs_batch.items()
                     }
 
-                # Add timestep_pad_mask
+                # Add pad_mask (v1.0 uses "pad_mask", not "timestep_pad_mask")
                 pad_mask = np.ones((FLAGS.batch_size, ws), dtype=bool)
-                obs_batch["timestep_pad_mask"] = pad_mask
+                obs_batch["pad_mask"] = pad_mask
 
                 obs_batch = jax.tree.map(jnp.array, obs_batch)
 
