@@ -50,6 +50,7 @@ flags.DEFINE_integer("log_every", 50, "Log every N steps.")
 flags.DEFINE_integer("save_every", 5000, "Save checkpoint every N steps.")
 flags.DEFINE_string("checkpoint_dir", "checkpoints/flextok", "Checkpoint save directory.")
 flags.DEFINE_float("grad_clip", 1.0, "Gradient clipping norm.")
+flags.DEFINE_string("hf_repo", None, "HuggingFace repo to push final model (e.g. 'username/flextok-bridge-v2').")
 
 
 def _decode_image(raw_bytes):
@@ -124,22 +125,33 @@ class BridgeV2ImageDataset(IterableDataset):
                 yield img_tensor
 
 
-def compute_flow_loss(data_dict):
+def compute_flow_loss(model, data_dict):
     """Compute rectified flow matching loss from FlexTok forward output.
 
-    The noise module stores the noise and clean VAE latents. The decoder
-    predicts a velocity field v_θ. The target velocity is (noise - clean).
+    The noise module creates x_t = (1-t)·clean + t·noise and stores the noise.
+    The decoder predicts a velocity v_θ(x_t, t).
+    Target velocity = noise - clean (direction from clean to noise).
 
     Loss = mean || v_θ - (noise - clean) ||²
+
+    Key names are read from the model's modules to avoid hardcoding.
     """
-    noise_list = data_dict["flow_noise"]
-    clean_list = data_dict[data_dict.get("_clean_key", "vae_latents")]
-    pred_list = data_dict["dec_output"]
+    noise_module = model.flow_matching_noise_module
+    clean_key = noise_module.clean_images_read_key
+    noise_key = noise_module.noise_write_key
+
+    # The decoder's final head writes the prediction
+    dec_head = model.decoder.module_dict["dec_head"]
+    pred_key = dec_head.write_key
+
+    noise_list = data_dict[noise_key]
+    clean_list = data_dict[clean_key]
+    pred_list = data_dict[pred_key]
 
     total_loss = 0.0
     count = 0
     for noise, clean, pred in zip(noise_list, clean_list, pred_list):
-        target = noise - clean  # velocity target
+        target = noise - clean
         total_loss = total_loss + F.mse_loss(pred, target)
         count += 1
 
@@ -248,18 +260,29 @@ def main(_):
                 running_loss = 0.0
 
             if step % FLAGS.save_every == 0:
-                ckpt_path = os.path.join(FLAGS.checkpoint_dir, f"flextok_step{step}.pt")
-                torch.save({
-                    "step": step,
-                    "model_state_dict": {
-                        k: v for k, v in model.state_dict().items()
-                        if "vae" not in k
-                    },
-                    "optimizer_state_dict": optimizer.state_dict(),
-                }, ckpt_path)
-                logging.info(f"Saved checkpoint to {ckpt_path}")
+                if FLAGS.hf_repo:
+                    logging.info(f"Pushing checkpoint at step {step} to {FLAGS.hf_repo}...")
+                    model.push_to_hub(FLAGS.hf_repo, commit_message=f"checkpoint step {step}")
+                    logging.info("Upload complete.")
+                else:
+                    ckpt_path = os.path.join(FLAGS.checkpoint_dir, f"flextok_step{step}.pt")
+                    torch.save({
+                        "step": step,
+                        "model_state_dict": {
+                            k: v for k, v in model.state_dict().items()
+                            if "vae" not in k
+                        },
+                        "optimizer_state_dict": optimizer.state_dict(),
+                    }, ckpt_path)
+                    logging.info(f"Saved checkpoint to {ckpt_path}")
 
     logging.info(f"Training complete at step {step}")
+
+    # Push final model to HuggingFace
+    if FLAGS.hf_repo:
+        logging.info(f"Pushing model to HuggingFace: {FLAGS.hf_repo}")
+        model.push_to_hub(FLAGS.hf_repo)
+        logging.info("Upload complete.")
 
 
 if __name__ == "__main__":
