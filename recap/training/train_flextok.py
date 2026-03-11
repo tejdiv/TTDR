@@ -1,8 +1,8 @@
 """Fine-tune FlexTok on Bridge V2 robotics images with rectified flow loss.
 
-Streams Bridge V2 frames via Octo's OXE dataloader, feeds them through
-FlexTok's forward pass (VAE encode → encoder → regularizer → noise →
-decoder), and trains with the rectified flow matching objective:
+Streams Bridge V2 frames, feeds them through FlexTok's forward pass
+(VAE encode → encoder → regularizer → noise → decoder), and trains
+with the rectified flow matching objective:
 
     L = || v_θ(x_t, t) - (ε - x_0) ||²
 
@@ -14,17 +14,13 @@ The VAE is frozen. Only the encoder and decoder are trained.
 Usage:
     python -m recap.training.train_flextok \
         --data_dir /path/to/bridge_v2_rlds \
-        --num_steps 50000 --batch_size 8 --lr 1e-4
+        --num_steps 50000 --batch_size 8 --lr 1e-4 \
+        --hf_repo your-username/flextok-bridge-v2
 """
 
 import os
-from functools import partial
 
 import numpy as np
-import tensorflow as tf
-# Prevent TF from grabbing GPU
-tf.config.set_visible_devices([], "GPU")
-
 import torch
 import torch.nn.functional as F
 from torch.utils.data import IterableDataset, DataLoader
@@ -32,39 +28,27 @@ from absl import app, flags, logging
 
 from flextok.flextok_wrapper import FlexTokFromHub
 
-from octo.data.dataset import make_dataset_from_rlds
-from octo.data.oxe.oxe_dataset_configs import OXE_DATASET_CONFIGS
-from octo.data.oxe.oxe_standardization_transforms import OXE_STANDARDIZATION_TRANSFORMS
-from octo.utils.spec import ModuleSpec
-
 FLAGS = flags.FLAGS
-flags.DEFINE_string("data_dir", "/home/ubuntu/data/rlds", "Path to Bridge V2 RLDS data directory.")
+flags.DEFINE_string("data_dir", "/home/ubuntu/data/rlds/bridge_dataset/1.0.0", "Path to Bridge V2 RLDS data directory.")
 flags.DEFINE_boolean("auto_download", True, "Auto-download Bridge V2 if not found.")
 flags.DEFINE_integer("batch_size", 8, "Training batch size.")
 flags.DEFINE_integer("image_size", 256, "Image resize dimension.")
 flags.DEFINE_integer("max_frames_per_traj", 0, "Max frames per trajectory (0 = all).")
 flags.DEFINE_float("lr", 1e-4, "Learning rate.")
 flags.DEFINE_float("weight_decay", 0.01, "AdamW weight decay.")
-flags.DEFINE_integer("num_steps", 50000, "Total training steps.")
+flags.DEFINE_integer("num_steps", 5000, "Total training steps.")
 flags.DEFINE_integer("log_every", 50, "Log every N steps.")
-flags.DEFINE_integer("save_every", 5000, "Save checkpoint every N steps.")
+flags.DEFINE_integer("save_every", 500, "Save checkpoint every N steps.")
 flags.DEFINE_string("checkpoint_dir", "checkpoints/flextok", "Checkpoint save directory.")
 flags.DEFINE_float("grad_clip", 1.0, "Gradient clipping norm.")
 flags.DEFINE_string("hf_repo", None, "HuggingFace repo to push final model (e.g. 'username/flextok-bridge-v2').")
 
 
-def _decode_image(raw_bytes):
-    """Decode a single JPEG byte string to numpy (H, W, 3) uint8."""
-    return tf.io.decode_image(
-        raw_bytes, channels=3, expand_animations=False, dtype=tf.uint8
-    ).numpy()
-
-
 class BridgeV2ImageDataset(IterableDataset):
     """Streams individual frames from Bridge V2 as PyTorch tensors.
 
-    Each item is a (C, H, W) float32 tensor normalized to [0, 1].
-    Trajectories are loaded lazily via tf.data — only one is in memory at a time.
+    Each item is a (C, H, W) float32 tensor normalized to [-1, 1].
+    Reads RLDS tfrecords directly via tf.data (no tfds dependency).
     """
 
     def __init__(self, data_dir, image_size=256, max_frames_per_traj=0, shuffle=True):
@@ -74,32 +58,33 @@ class BridgeV2ImageDataset(IterableDataset):
         self.max_frames_per_traj = max_frames_per_traj
         self.shuffle = shuffle
 
-    def _make_dataset(self):
-        config = OXE_DATASET_CONFIGS["bridge_dataset"]
-        standardize_fn = ModuleSpec.create(
-            OXE_STANDARDIZATION_TRANSFORMS["bridge_dataset"]
-        )
-
-        dataset, _ = make_dataset_from_rlds(
-            name="bridge_dataset",
-            data_dir=self.data_dir,
-            train=True,
-            standardize_fn=standardize_fn,
-            image_obs_keys=config["image_obs_keys"],
-            language_key="language_instruction",
-            shuffle=self.shuffle,
-        )
-
-        dataset = dataset.filter(
-            lambda x: tf.math.reduce_any(x["task"]["language_instruction"] != "")
-        )
-        return dataset
-
     def __iter__(self):
-        dataset = self._make_dataset()
+        import glob
+        import tensorflow as tf
+        try:
+            tf.config.set_visible_devices([], "GPU")
+        except AttributeError:
+            pass
 
-        for traj in dataset.as_numpy_iterator():
-            image_bytes = traj["observation"]["image_primary"]  # (T,) JPEG bytes
+        # Find all tfrecord shards
+        pattern = os.path.join(self.data_dir, "bridge_dataset-train.tfrecord-*")
+        files = sorted(glob.glob(pattern))
+        assert len(files) > 0, f"No tfrecord files found at {pattern}"
+
+        if self.shuffle:
+            np.random.shuffle(files)
+
+        # Each tfrecord is a tf.train.Example with flat features.
+        # Images are stored as variable-length byte lists in steps/observation/image_0.
+        feature_desc = {
+            "steps/observation/image_0": tf.io.VarLenFeature(tf.string),
+        }
+
+        dataset = tf.data.TFRecordDataset(files)
+
+        for raw_record in dataset:
+            parsed = tf.io.parse_single_example(raw_record, feature_desc)
+            image_bytes = tf.sparse.to_dense(parsed["steps/observation/image_0"], default_value=b"")
             T = len(image_bytes)
 
             if self.max_frames_per_traj > 0 and T > self.max_frames_per_traj:
@@ -109,11 +94,10 @@ class BridgeV2ImageDataset(IterableDataset):
                 indices = range(T)
 
             for i in indices:
-                raw = image_bytes[i]
-                if not isinstance(raw, (bytes, np.bytes_)) or len(raw) == 0:
+                raw = image_bytes[i].numpy()
+                if len(raw) == 0:
                     continue
-
-                img = _decode_image(raw)  # (H, W, 3) uint8
+                img = tf.io.decode_image(raw, channels=3, expand_animations=False).numpy()  # (H, W, 3) uint8
 
                 if img.shape[0] != self.image_size or img.shape[1] != self.image_size:
                     img = tf.image.resize(
@@ -121,7 +105,8 @@ class BridgeV2ImageDataset(IterableDataset):
                         method="lanczos3", antialias=True,
                     ).numpy().astype(np.uint8)
 
-                img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
+                # Normalize to [-1, 1] (FlexTok convention)
+                img_tensor = torch.from_numpy(img.copy()).permute(2, 0, 1).float() / 127.5 - 1.0
                 yield img_tensor
 
 
@@ -140,9 +125,15 @@ def compute_flow_loss(model, data_dict):
     clean_key = noise_module.clean_images_read_key
     noise_key = noise_module.noise_write_key
 
-    # The decoder's final head writes the prediction
-    dec_head = model.decoder.module_dict["dec_head"]
-    pred_key = dec_head.write_key
+    # Find the decoder's final output head (last module with a write_key)
+    pred_key = None
+    for name, module in reversed(list(model.decoder.module_dict.items())):
+        if hasattr(module, "write_key"):
+            pred_key = module.write_key
+            break
+    assert pred_key is not None, (
+        f"Could not find decoder output key. Decoder modules: {list(model.decoder.module_dict.keys())}"
+    )
 
     noise_list = data_dict[noise_key]
     clean_list = data_dict[clean_key]
@@ -165,19 +156,18 @@ def download_bridge_v2(data_dir):
     """Download Bridge V2 RLDS dataset if not already present."""
     import subprocess
 
-    target = os.path.join(data_dir, "bridge_dataset", "1.0.0")
-    marker = os.path.join(target, "dataset_info.json")
+    marker = os.path.join(data_dir, "dataset_info.json")
 
     if os.path.exists(marker):
-        logging.info(f"Bridge V2 already exists at {target}")
+        logging.info(f"Bridge V2 already exists at {data_dir}")
         return
 
-    logging.info(f"Downloading Bridge V2 to {target}...")
-    os.makedirs(target, exist_ok=True)
+    logging.info(f"Downloading Bridge V2 to {data_dir}...")
+    os.makedirs(data_dir, exist_ok=True)
     subprocess.run([
-        "wget", "-c", "-r", "-np", "-nH", "--cut-dirs=4",
+        "wget", "-c", "-r", "-np", "-nH", "--cut-dirs=6",
         "--reject", "index.html*",
-        "-P", target,
+        "-P", data_dir,
         BRIDGE_URL,
     ], check=True)
     logging.info("Download complete.")
@@ -188,6 +178,7 @@ def main(_):
 
     if FLAGS.auto_download:
         download_bridge_v2(FLAGS.data_dir)
+
     os.makedirs(FLAGS.checkpoint_dir, exist_ok=True)
 
     # --- Load FlexTok ---
@@ -234,21 +225,44 @@ def main(_):
             if step >= FLAGS.num_steps:
                 break
 
-            # images: (B, 3, 256, 256) float32 [0, 1]
             images = images.to(device)
 
-            # FlexTok expects data_dict with "rgb" as list of (1, C, H, W)
-            data_dict = {model.vae.images_read_key: images.split(1)}
+            # FlexTok expects data_dict with images as list of (1, C, H, W)
+            data_dict = {model.vae.images_read_key: list(images.split(1))}
 
             # Forward: VAE encode (frozen) → encoder → regularizer → noise → decoder
             data_dict = model(data_dict)
 
             # Rectified flow loss: || v_θ - (noise - clean) ||²
-            loss = compute_flow_loss(data_dict)
+            loss = compute_flow_loss(model, data_dict)
+
+            # Diagnostics on first step
+            if step == 0:
+                noise_module = model.flow_matching_noise_module
+                clean_key = noise_module.clean_images_read_key
+                noise_key = noise_module.noise_write_key
+                pred_key = None
+                for name, module in reversed(list(model.decoder.module_dict.items())):
+                    if hasattr(module, "write_key"):
+                        pred_key = module.write_key
+                        break
+                logging.info(f"[DIAG] clean_key={clean_key}, noise_key={noise_key}, pred_key={pred_key}")
+                logging.info(f"[DIAG] data_dict keys: {list(data_dict.keys())}")
+                logging.info(f"[DIAG] decoder modules: {list(model.decoder.module_dict.keys())}")
+                c = data_dict[clean_key][0]
+                n = data_dict[noise_key][0]
+                p = data_dict[pred_key][0]
+                t = n - c
+                logging.info(f"[DIAG] clean: mean={c.mean():.4f} std={c.std():.4f} shape={c.shape}")
+                logging.info(f"[DIAG] noise: mean={n.mean():.4f} std={n.std():.4f} shape={n.shape}")
+                logging.info(f"[DIAG] pred:  mean={p.mean():.4f} std={p.std():.4f} shape={p.shape}")
+                logging.info(f"[DIAG] target (noise-clean): mean={t.mean():.4f} std={t.std():.4f}")
+                logging.info(f"[DIAG] input images: min={images.min():.4f} max={images.max():.4f}")
+                logging.info(f"[DIAG] initial loss={loss.item():.6f}")
 
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(trainable_params, FLAGS.grad_clip)
+            grad_norm = torch.nn.utils.clip_grad_norm_(trainable_params, FLAGS.grad_clip)
             optimizer.step()
 
             step += 1
@@ -256,25 +270,13 @@ def main(_):
 
             if step % FLAGS.log_every == 0:
                 avg_loss = running_loss / FLAGS.log_every
-                logging.info(f"Step {step}/{FLAGS.num_steps} | loss={avg_loss:.6f}")
+                logging.info(f"Step {step}/{FLAGS.num_steps} | loss={avg_loss:.6f} | grad_norm={grad_norm:.4f}")
                 running_loss = 0.0
 
-            if step % FLAGS.save_every == 0:
-                if FLAGS.hf_repo:
-                    logging.info(f"Pushing checkpoint at step {step} to {FLAGS.hf_repo}...")
-                    model.push_to_hub(FLAGS.hf_repo, commit_message=f"checkpoint step {step}")
-                    logging.info("Upload complete.")
-                else:
-                    ckpt_path = os.path.join(FLAGS.checkpoint_dir, f"flextok_step{step}.pt")
-                    torch.save({
-                        "step": step,
-                        "model_state_dict": {
-                            k: v for k, v in model.state_dict().items()
-                            if "vae" not in k
-                        },
-                        "optimizer_state_dict": optimizer.state_dict(),
-                    }, ckpt_path)
-                    logging.info(f"Saved checkpoint to {ckpt_path}")
+            if step % FLAGS.save_every == 0 and FLAGS.hf_repo:
+                logging.info(f"Pushing checkpoint at step {step} to {FLAGS.hf_repo}...")
+                model.push_to_hub(FLAGS.hf_repo, commit_message=f"checkpoint step {step}")
+                logging.info("Upload complete.")
 
     logging.info(f"Training complete at step {step}")
 
