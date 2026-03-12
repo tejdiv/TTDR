@@ -1,0 +1,30 @@
+# Stage 2: Pretrain Octo with (g, I) conditioning + hindsight relabeling
+# This is where I becomes meaningful. Without this stage, I is random noise.
+#
+# Hindsight relabeling generates M anchors per transition. The same action
+# gets I=1 for some anchors and I=0 for others. The model learns:
+# "I=1 means this action went toward g."
+
+moto:
+  tokenizer_checkpoint: "TencentARC/Moto"
+  gpt_checkpoint: "checkpoints/moto_gpt_finetuned/moto_gpt_finetuned.pt"
+  hidden_dim: 768          # Moto-GPT hidden state dimension
+  frame_skip: 3            # m — must match Stage 1
+
+data:
+  data_dir: "/home/ubuntu/data/rlds"
+  max_trajectories: 0
+
+lora:
+  rank: 8
+  backbone_lora: false     # only action head during pretraining
+
+training:
+  batch_size: 64
+  learning_rate: 3.0e-4
+  epochs: 5
+  recap_alpha: 1.0         # weight on conditioned CFG term
+  hindsight_M: 50          # anchors per real transition
+  max_buffer: 10000
+  seed: 0
+  save_dir: "checkpoints/moto_policy_pretrained"

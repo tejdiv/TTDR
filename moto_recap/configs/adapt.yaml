@@ -1,0 +1,40 @@
+# Stage 3: Test-time RECAP adaptation with Moto-GPT world model
+#
+# CFG preserves RECAP identity: pi_improved = pi(a|I=1,o,l,g)
+# All actions from pi_ref, all outcomes real, rewards deterministic.
+
+moto:
+  tokenizer_checkpoint: "TencentARC/Moto"
+  gpt_checkpoint: "checkpoints/moto_gpt_finetuned/moto_gpt_finetuned.pt"
+  frame_skip: 3   # m — execute m env steps before computing reward
+                   # Must match tokenizer pretraining (m=3).
+                   # Larger m = sparser but more informative rewards.
+                   # Smaller m = denser but potentially OOD for tokenizer.
+
+# Stage 2 pretrained checkpoint (anchor projection + I embedding)
+pretrained_checkpoint: "checkpoints/moto_policy_pretrained"
+
+lora:
+  rank: 8
+  backbone_lora: false
+
+adaptation:
+  mode: "lora"            # "lora" or "full" — ablation flag
+                          # lora: update LoRA layers only (fast, fewer params)
+                          # full: update full action head (more capacity, slower)
+  lr: 1.0e-4
+  update_every_M: 10      # RECAP cycle interval (env steps)
+  num_bc_steps: 100        # max gradient steps per RECAP cycle
+  bc_batch_size: 16
+  min_buffer: 16
+  num_episodes: 1
+  recap_alpha: 1.0         # CFG weight: L = -log pi(a|o,l) + alpha * -log pi(a|I,o,l,g)
+
+buffer:
+  max_size: 256
+
+env:
+  perturbation: "object_friction"
+  perturbation_scale: 0.3
+
+device: "cuda"

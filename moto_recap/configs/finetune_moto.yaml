@@ -1,0 +1,21 @@
+# Stage 1: Fine-tune Moto-GPT on Bridge V2
+# Freeze tokenizer, fine-tune GPT with random context truncation.
+# This shifts the motion token prior from generic OXE to Bridge V2.
+
+moto:
+  tokenizer_checkpoint: "TencentARC/Moto"  # uses latent_motion_tokenizer_trained_on_oxe/ subdir
+  gpt_checkpoint: "TencentARC/Moto"        # uses moto_gpt_pretrained_on_oxe/ subdir
+  frame_skip: 3  # m — temporal distance between frame pairs for tokenizer
+                  # Must match tokenizer's pretraining (OXE uses m=3).
+                  # At test time, execute m env steps before computing reward.
+
+data:
+  data_dir: "/home/ubuntu/data/rlds"  # Bridge V2 RLDS directory
+  max_trajectories: 0                 # 0 = all
+
+training:
+  batch_size: 512
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  epochs: 10
+  save_dir: "checkpoints/moto_gpt_finetuned"
