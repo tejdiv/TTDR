@@ -136,7 +136,7 @@ Source: RAIL Berkeley (the up-to-date copy Octo expects).
 ```bash
 mkdir -p /home/ubuntu/data/rlds/bridge_dataset/1.0.0
 
-wget -r -np -nH --cut-dirs=4 -P /home/ubuntu/data/rlds/bridge_dataset/1.0.0 https://rail.eecs.berkeley.edu/datasets/bridge_release/data/tfds/bridge_dataset/1.0.0/
+wget -r -np -nH --cut-dirs=6 -P /home/ubuntu/data/rlds/bridge_dataset/1.0.0 https://rail.eecs.berkeley.edu/datasets/bridge_release/data/tfds/bridge_dataset/1.0.0/
 ```
 
 ## 6. Precompute encoder outputs
